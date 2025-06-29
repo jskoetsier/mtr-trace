@@ -5,6 +5,14 @@ All notable changes to the MTR-Trace NSE script will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.2] - 2025-06-29
+
+### Fixed
+- Fixed ASN lookup for non-private networks (like Google, Facebook, etc.)
+- Added special handling for well-known IP ranges for faster and more reliable ASN lookups
+- Added debug output for ASN lookups to help troubleshoot issues
+- Ensured target IP is correctly identified with proper ASN information
+
 ## [1.0.1] - 2025-06-29
 
 ### Changed

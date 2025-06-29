@@ -4,7 +4,7 @@
 
 MTR-Trace is an Nmap Scripting Engine (NSE) script that performs MTR-like (My Traceroute) traces to a target host. It provides comprehensive information about each hop in the path, including latency, jitter, packet loss, OS fingerprinting, and ASN information.
 
-Version: 1.0.0
+Version: 1.0.2
 
 ## Features
 
