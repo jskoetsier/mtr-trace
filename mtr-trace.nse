@@ -8,7 +8,7 @@ local http = require "http"
 local dns = require "dns"
 
 -- Script version information
-local VERSION = "1.1.0"
+local VERSION = "1.2.0"
 
 description = [[
 Performs an MTR-like (My Traceroute) trace to a host, showing per-hop latency,

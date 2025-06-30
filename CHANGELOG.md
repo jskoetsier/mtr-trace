@@ -5,6 +5,25 @@ All notable changes to the MTR-Trace NSE script will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2025-06-30
+
+### Added
+- Added NTT IRRD service for more accurate ASN resolution
+- Added support for multiple IRRD servers (NTT, Level3, RADB, RIPE)
+- Added special handling for problematic IP addresses
+- Added macOS detection for better compatibility
+
+### Changed
+- Replaced Team Cymru DNS-based ASN lookups with direct IRRD queries
+- Improved error handling and debugging for ASN resolution
+- Increased timeout for IRRD queries from 5 to 10 seconds
+
+### Fixed
+- Fixed traceroute not working as root on macOS
+- Fixed variable scope issues causing runtime errors
+- Fixed incorrect ASN resolution for certain IP addresses
+- Fixed socket library dependency issues by using Nmap's built-in socket functionality
+
 ## [1.0.4] - 2025-06-29
 
 ### Added
