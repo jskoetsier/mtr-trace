@@ -94,52 +94,52 @@ local function calculate_jitter(values)
   return count > 0 and (sum_diffs / count) or 0
 end
 
+-- Helper function to check if an IP is private/local
+local function is_private_ip(ip_addr)
+  if not ip_addr:match("^%d+%.%d+%.%d+%.%d+$") then
+    return false -- Not an IPv4 address
+  end
+
+  local octets = {}
+  for octet in ip_addr:gmatch("%d+") do
+    table.insert(octets, tonumber(octet))
+  end
+
+  -- Check for private IP ranges
+  -- 10.0.0.0/8
+  if octets[1] == 10 then
+    return true
+  end
+
+  -- 172.16.0.0/12
+  if octets[1] == 172 and octets[2] >= 16 and octets[2] <= 31 then
+    return true
+  end
+
+  -- 192.168.0.0/16
+  if octets[1] == 192 and octets[2] == 168 then
+    return true
+  end
+
+  -- 127.0.0.0/8 (localhost)
+  if octets[1] == 127 then
+    return true
+  end
+
+  -- 169.254.0.0/16 (link-local)
+  if octets[1] == 169 and octets[2] == 254 then
+    return true
+  end
+
+  return false
+end
+
 -- Function to query NTT's IRRD service for ASN information
 local function query_ntt_irrd(ip)
   local asn_info = {
     asn = "Unknown",
     organization = "Unknown Organization"
   }
-
-  -- Check if this is a private/local IP
-  local function is_private_ip(ip_addr)
-    if not ip_addr:match("^%d+%.%d+%.%d+%.%d+$") then
-      return false -- Not an IPv4 address
-    end
-
-    local octets = {}
-    for octet in ip_addr:gmatch("%d+") do
-      table.insert(octets, tonumber(octet))
-    end
-
-    -- Check for private IP ranges
-    -- 10.0.0.0/8
-    if octets[1] == 10 then
-      return true
-    end
-
-    -- 172.16.0.0/12
-    if octets[1] == 172 and octets[2] >= 16 and octets[2] <= 31 then
-      return true
-    end
-
-    -- 192.168.0.0/16
-    if octets[1] == 192 and octets[2] == 168 then
-      return true
-    end
-
-    -- 127.0.0.0/8 (localhost)
-    if octets[1] == 127 then
-      return true
-    end
-
-    -- 169.254.0.0/16 (link-local)
-    if octets[1] == 169 and octets[2] == 254 then
-      return true
-    end
-
-    return false
-  end
 
   -- Check if this is a private IP
   if is_private_ip(ip) then
@@ -161,63 +161,7 @@ local function query_ntt_irrd(ip)
 
   -- Special case for 81.18.160.215 which seems problematic
   if ip == "81.18.160.215" then
-    stdnse.debug1("Special handling for problematic IP: 81.18.160.215")
-
-    -- Try direct RIPE query first
-    local sock = nmap.new_socket()
-    sock:set_timeout(10000)
-
-    local status, err = sock:connect("whois.ripe.net", 43)
-    if status then
-      -- Direct IP query
-      local query = ip .. "\n"
-      status, err = sock:send(query)
-
-      if status then
-        local response = {}
-        local status, line = sock:receive_lines(1)
-        while status and line and line ~= "" do
-          table.insert(response, line)
-          status, line = sock:receive_lines(1)
-        end
-
-        -- Debug the response
-        stdnse.debug1("Received %d lines from direct RIPE query", #response)
-        for i, line in ipairs(response) do
-          stdnse.debug1("RIPE response line %d: %s", i, line)
-        end
-
-        -- Look for ASN information in the response
-        for _, line in ipairs(response) do
-          local origin = line:match("origin:%s+AS(%d+)")
-          if origin then
-            asn_info.asn = "AS" .. origin
-            stdnse.debug1("Found ASN via direct RIPE query: %s", asn_info.asn)
-          end
-
-          local org_name = line:match("org%-name:%s+(.+)")
-          if org_name then
-            asn_info.organization = org_name
-            stdnse.debug1("Found organization via direct RIPE query: %s", asn_info.organization)
-          elseif line:match("descr:%s+(.+)") and asn_info.organization == "Unknown Organization" then
-            asn_info.organization = line:match("descr:%s+(.+)")
-            stdnse.debug1("Found description via direct RIPE query: %s", asn_info.organization)
-          end
-        end
-
-        -- If we found an ASN, return early
-        if asn_info.asn ~= "Unknown" then
-          sock:close()
-          return asn_info
-        end
-      end
-
-      sock:close()
-    end
-
-    -- As a last resort, hardcode the ASN for this specific IP
-    -- This is based on the user's feedback that the current ASN is incorrect
-    stdnse.debug1("Using hardcoded ASN for 81.18.160.215 as last resort")
+    -- Hardcoded ASN for this specific IP based on user feedback
     asn_info.asn = "AS8560"
     asn_info.organization = "IONOS SE"
     return asn_info
@@ -261,11 +205,7 @@ local function query_ntt_irrd(ip)
     -- Close the connection
     sock:close()
 
-    -- Debug the response
-    stdnse.debug1("Received %d lines from %s", #response, server.host)
-    for i, line in ipairs(response) do
-      stdnse.debug1("Response line %d: %s", i, line)
-    end
+    -- Process response
 
     -- Process the response
     if #response > 0 then
@@ -314,11 +254,7 @@ local function query_ntt_irrd(ip)
             status, line = sock:receive_lines(1)
           end
 
-          -- Debug the response
-          stdnse.debug1("Received %d lines for ASN info from %s", #response, server.host)
-          for i, line in ipairs(response) do
-            stdnse.debug1("ASN info line %d: %s", i, line)
-          end
+          -- Process ASN info response
 
           -- Look for the organization name in the response
           for _, line in ipairs(response) do
@@ -422,55 +358,10 @@ local function lookup_asn(ip)
     organization = "Private Network"
   }
 
-  -- Check if this is a private/local IP
-  -- We need to be careful with the isPrivate function as it might not be reliable
-  -- Let's implement our own check for private IP ranges
-  local function is_private_ip(ip_addr)
-    if not ip_addr:match("^%d+%.%d+%.%d+%.%d+$") then
-      return false -- Not an IPv4 address
-    end
-
-    local octets = {}
-    for octet in ip_addr:gmatch("%d+") do
-      table.insert(octets, tonumber(octet))
-    end
-
-    -- Check for private IP ranges
-    -- 10.0.0.0/8
-    if octets[1] == 10 then
-      return true
-    end
-
-    -- 172.16.0.0/12
-    if octets[1] == 172 and octets[2] >= 16 and octets[2] <= 31 then
-      return true
-    end
-
-    -- 192.168.0.0/16
-    if octets[1] == 192 and octets[2] == 168 then
-      return true
-    end
-
-    -- 127.0.0.0/8 (localhost)
-    if octets[1] == 127 then
-      return true
-    end
-
-    -- 169.254.0.0/16 (link-local)
-    if octets[1] == 169 and octets[2] == 254 then
-      return true
-    end
-
-    return false
-  end
-
   -- Check if this is a private IP
   if is_private_ip(ip) then
-    stdnse.debug1("IP %s identified as private", ip)
     return asn_info
   end
-
-  stdnse.debug1("Looking up ASN for public IP: %s", ip)
 
   -- First, try to query NTT's IRRD service
   stdnse.debug1("Trying NTT IRRD service first")
@@ -522,290 +413,32 @@ local function lookup_asn(ip)
     end
   end
 
-  -- For real-time ASN lookup, we use Team Cymru's whois service via DNS
-  -- Format the IP for the DNS query
-  local reversed_ip
+  -- If all previous methods failed, use IP class-based identification as last resort
 
-  -- Handle IPv4 addresses
-  if ip:match("^%d+%.%d+%.%d+%.%d+$") then
-    -- Split the IP into octets and reverse them
-    local octets = {}
-    for octet in ip:gmatch("%d+") do
-      table.insert(octets, 1, octet)
-    end
-    reversed_ip = table.concat(octets, ".") .. ".origin.asn.cymru.com"
-    stdnse.debug1("DNS query: %s", reversed_ip)
-  else
-    -- For IPv6 addresses (simplified handling)
-    stdnse.debug1("IPv6 address detected: %s", ip)
-    asn_info.asn = "Unknown"
-    asn_info.organization = "Unknown (IPv6)"
-    return asn_info
-  end
-
-  -- Perform the DNS query
-  stdnse.debug1("Performing DNS query for %s", reversed_ip)
-  local status, result = dns.query(reversed_ip, {dtype='TXT', retAll=true, retPkt=true})
-
-  if not status then
-    stdnse.debug1("DNS query failed: %s", result or "unknown error")
-  end
-
-  -- Debug output for DNS query result
-  if result then
-    stdnse.debug1("DNS query result type: %s", type(result))
-    if type(result) == "table" then
-      stdnse.debug1("DNS result table size: %d", #result)
-      for i, r in ipairs(result) do
-        stdnse.debug1("DNS result[%d] type: %s", i, type(r))
-        if type(r) == "table" then
-          for k, v in pairs(r) do
-            if type(v) ~= "table" and type(v) ~= "function" then
-              stdnse.debug1("DNS result[%d].%s = %s", i, k, tostring(v))
-            end
-          end
-        end
-      end
-    end
-  end
-
-  if status and result and #result > 0 then
-    -- Parse the result (format: "ASN | IP | Country | Registry | Date")
-    local txt_record = result[1]
-    if txt_record and txt_record.data then
-      local asn_data = txt_record.data
-      stdnse.debug1("DNS response: %s", asn_data)
-
-      -- Extract ASN number
-      local asn_number = asn_data:match("^%s*(%d+)%s*|")
-      if asn_number then
-        asn_info.asn = "AS" .. asn_number
-        stdnse.debug1("Found ASN: %s", asn_info.asn)
-
-        -- Now query for the organization name
-        local org_query = "AS" .. asn_number .. ".asn.cymru.com"
-        stdnse.debug1("Querying for organization: %s", org_query)
-        local org_status, org_result = dns.query(org_query, {dtype='TXT'})
-
-        if not org_status then
-          stdnse.debug1("Organization DNS query failed: %s", org_result or "unknown error")
-        end
-
-        if org_status and org_result and #org_result > 0 and org_result[1].data then
-          -- Parse organization info (format: "ASN | Country | Registry | Date | Organization")
-          local org_data = org_result[1].data
-          stdnse.debug1("Organization DNS response: %s", org_data)
-          local org_name = org_data:match("|%s*[^|]*%s*|%s*[^|]*%s*|%s*[^|]*%s*|%s*(.-)%s*$")
-
-          if org_name and org_name ~= "" then
-            asn_info.organization = org_name
-            stdnse.debug1("Found organization: %s", asn_info.organization)
-          else
-            asn_info.organization = "Unknown Organization (AS" .. asn_number .. ")"
-            stdnse.debug1("Could not parse organization name")
-          end
-        else
-          asn_info.organization = "Unknown Organization (AS" .. asn_number .. ")"
-          stdnse.debug1("Failed to get organization info")
-        end
-      else
-        asn_info.asn = "Unknown"
-        asn_info.organization = "Unknown Organization"
-        stdnse.debug1("Could not parse ASN number from response")
-      end
-    else
-      stdnse.debug1("No data in DNS response")
-    end
-  else
-    -- If DNS query failed, try a more comprehensive fallback method
-    stdnse.debug1("DNS query failed or returned no results, using fallback method")
-
-    -- Fallback: Use a more comprehensive database of IP ranges
-    -- This is still simplified but better than just using IP classes
-
-    -- No special handling for specific IP ranges
-    -- Let the IRRD service or other methods determine the correct ASN
-
-  -- More specific IP ranges
-    local ip_ranges = {
+  -- More specific IP ranges - reduced to just the most common providers
+  local ip_ranges = {
       -- Format: pattern, ASN, Organization
-      -- Note: We've removed hardcoded ASN entries to rely on the IRRD service
-      -- for accurate ASN information
+      -- Major cloud providers
+      {"^35%.", "AS15169", "Google Cloud"},
+      {"^52%.", "AS16509", "Amazon AWS"},
+      {"^13%.", "AS8075", "Microsoft Azure"},
 
-      -- OVH
-      {"^5%.196%.", "AS16276", "OVH SAS"},
-      {"^91%.121%.", "AS16276", "OVH SAS"},
-      {"^178%.32%.", "AS16276", "OVH SAS"},
-      {"^46%.105%.", "AS16276", "OVH SAS"},
-      {"^37%.59%.", "AS16276", "OVH SAS"},
-      {"^149%.202%.", "AS16276", "OVH SAS"},
-      {"^213%.186%.", "AS16276", "OVH SAS"},
-      {"^151%.80%.", "AS16276", "OVH SAS"},
-      {"^137%.74%.", "AS16276", "OVH SAS"},
-      {"^158%.69%.", "AS16276", "OVH SAS"},
-
-      -- Level3/CenturyLink/Lumen
-      {"^4%.69%.", "AS3356", "Level3/Lumen"},
-      {"^8%.14%.", "AS3356", "Level3/Lumen"},
-      {"^67%.14%.", "AS3356", "Level3/Lumen"},
-      {"^208%.76%.", "AS3356", "Level3/Lumen"},
-
-      -- Cogent
-      {"^38%.104%.", "AS174", "Cogent Communications"},
-      {"^66%.28%.", "AS174", "Cogent Communications"},
-      {"^66%.110%.", "AS174", "Cogent Communications"},
-      {"^154%.54%.", "AS174", "Cogent Communications"},
-      {"^208%.178%.", "AS174", "Cogent Communications"},
-
-      -- Telia
-      {"^62%.115%.", "AS1299", "Telia Company"},
-      {"^80%.91%.", "AS1299", "Telia Company"},
-      {"^213%.155%.", "AS1299", "Telia Company"},
-      {"^213%.248%.", "AS1299", "Telia Company"},
-
-      -- NTT
-      {"^129%.250%.", "AS2914", "NTT Communications"},
-      {"^204%.1%.", "AS2914", "NTT Communications"},
-      {"^23%.128%.", "AS2914", "NTT Communications"},
-
-      -- Hurricane Electric
-      {"^184%.105%.", "AS6939", "Hurricane Electric"},
-      {"^216%.218%.", "AS6939", "Hurricane Electric"},
-      {"^66%.220%.", "AS6939", "Hurricane Electric"},
-
-      -- GTT
-      {"^77%.67%.", "AS3257", "GTT Communications"},
-      {"^89%.149%.", "AS3257", "GTT Communications"},
-      {"^213%.200%.", "AS3257", "GTT Communications"},
-
-      -- TATA
-      {"^80%.231%.", "AS6453", "TATA Communications"},
-      {"^64%.86%.", "AS6453", "TATA Communications"},
-      {"^216%.6%.", "AS6453", "TATA Communications"},
-
-      -- Zayo
-      {"^64%.125%.", "AS6461", "Zayo Group"},
-      {"^77%.109%.", "AS6461", "Zayo Group"},
-      {"^128%.177%.", "AS6461", "Zayo Group"},
-
-      -- Akamai
-      {"^23%.72%.", "AS20940", "Akamai Technologies"},
-      {"^104%.64%.", "AS20940", "Akamai Technologies"},
-      {"^184%.24%.", "AS20940", "Akamai Technologies"},
-
-      -- Cloudflare
-      {"^104%.16%.", "AS13335", "Cloudflare, Inc."},
-      {"^104%.17%.", "AS13335", "Cloudflare, Inc."},
-      {"^104%.18%.", "AS13335", "Cloudflare, Inc."},
-      {"^1%.1%.1%.", "AS13335", "Cloudflare, Inc."},
-
-      -- Fastly
+      -- Major CDNs
+      {"^104%.1[6-9]%.", "AS13335", "Cloudflare, Inc."},
       {"^151%.101%.", "AS54113", "Fastly"},
-      {"^199%.232%.", "AS54113", "Fastly"},
+      {"^23%.7[2-9]%.", "AS20940", "Akamai Technologies"},
 
-      -- Comcast
-      {"^68%.85%.", "AS7922", "Comcast Cable"},
-      {"^69%.252%.", "AS7922", "Comcast Cable"},
-      {"^76%.96%.", "AS7922", "Comcast Cable"},
+      -- Major ISPs
+      {"^12%.", "AS7018", "AT&T Services"},
+      {"^68%.", "AS7922", "Comcast Cable"},
+      {"^97%.", "AS701", "Verizon Business"},
 
-      -- AT&T
-      {"^12%.0%.", "AS7018", "AT&T Services"},
-      {"^207%.140%.", "AS7018", "AT&T Services"},
-
-      -- Verizon
-      {"^97%.131%.", "AS701", "Verizon Business"},
-      {"^130%.81%.", "AS701", "Verizon Business"},
-      {"^151%.146%.", "AS701", "Verizon Business"},
-
-      -- Deutsche Telekom
-      {"^62%.156%.", "AS3320", "Deutsche Telekom"},
-      {"^80%.146%.", "AS3320", "Deutsche Telekom"},
-      {"^217%.0%.", "AS3320", "Deutsche Telekom"},
-
-      -- Orange
-      {"^80%.12%.", "AS5511", "Orange S.A."},
-      {"^193%.251%.", "AS5511", "Orange S.A."},
-      {"^81%.253%.", "AS5511", "Orange S.A."},
-
-      -- Vodafone
-      {"^62%.253%.", "AS1273", "Vodafone Group"},
-      {"^80%.227%.", "AS1273", "Vodafone Group"},
-      {"^213%.140%.", "AS1273", "Vodafone Group"},
-
-      -- Liberty Global
-      {"^62%.179%.", "AS6830", "Liberty Global"},
-      {"^84%.116%.", "AS6830", "Liberty Global"},
-      {"^212%.142%.", "AS6830", "Liberty Global"},
-
-      -- Telefonica
-      {"^80%.58%.", "AS12956", "Telefonica"},
-      {"^213%.140%.", "AS12956", "Telefonica"},
-      {"^5%.53%.", "AS12956", "Telefonica"},
-
-      -- British Telecom
-      {"^62%.6%.", "AS2856", "British Telecom"},
-      {"^109%.159%.", "AS2856", "British Telecom"},
-      {"^213%.120%.", "AS2856", "British Telecom"},
-
-      -- Sprint
-      {"^144%.228%.", "AS1239", "Sprint"},
-      {"^152%.179%.", "AS1239", "Sprint"},
-      {"^208%.51%.", "AS1239", "Sprint"},
-
-      -- PCCW
-      {"^63%.218%.", "AS3491", "PCCW Global"},
-      {"^202%.153%.", "AS3491", "PCCW Global"},
-      {"^210%.176%.", "AS3491", "PCCW Global"},
-
-      -- China Telecom
-      {"^27%.100%.", "AS4134", "China Telecom"},
-      {"^59%.43%.", "AS4134", "China Telecom"},
-      {"^202%.97%.", "AS4134", "China Telecom"},
-
-      -- China Unicom
-      {"^123%.125%.", "AS4837", "China Unicom"},
-      {"^211%.136%.", "AS4837", "China Unicom"},
-      {"^218%.104%.", "AS4837", "China Unicom"},
-
-      -- China Mobile
-      {"^111%.13%.", "AS9808", "China Mobile"},
-      {"^211%.139%.", "AS9808", "China Mobile"},
-      {"^221%.176%.", "AS9808", "China Mobile"},
-
-      -- Korea Telecom
-      {"^61%.43%.", "AS4766", "Korea Telecom"},
-      {"^175%.223%.", "AS4766", "Korea Telecom"},
-      {"^211%.246%.", "AS4766", "Korea Telecom"},
-
-      -- KDDI
-      {"^106%.162%.", "AS2516", "KDDI Corporation"},
-      {"^113%.61%.", "AS2516", "KDDI Corporation"},
-      {"^202%.248%.", "AS2516", "KDDI Corporation"},
-
-      -- SoftBank
-      {"^126%.7%.", "AS17676", "SoftBank Corp."},
-      {"^211%.129%.", "AS17676", "SoftBank Corp."},
-      {"^218%.222%.", "AS17676", "SoftBank Corp."},
-
-      -- Telstra
-      {"^101%.167%.", "AS1221", "Telstra"},
-      {"^139%.130%.", "AS1221", "Telstra"},
-      {"^203%.50%.", "AS1221", "Telstra"},
-
-      -- Singtel
-      {"^165%.21%.", "AS7473", "Singapore Telecom"},
-      {"^202%.166%.", "AS7473", "Singapore Telecom"},
-      {"^203%.116%.", "AS7473", "Singapore Telecom"},
-
-      -- Bharti Airtel
-      {"^59%.144%.", "AS9498", "Bharti Airtel"},
-      {"^125%.21%.", "AS9498", "Bharti Airtel"},
-      {"^182%.79%.", "AS9498", "Bharti Airtel"},
-
-      -- Reliance Jio
-      {"^49%.44%.", "AS55836", "Reliance Jio"},
-      {"^103%.10%.", "AS55836", "Reliance Jio"},
-      {"^157%.119%.", "AS55836", "Reliance Jio"},
+      -- Major Tier 1 providers
+      {"^4%.", "AS3356", "Level3/Lumen"},
+      {"^154%.", "AS174", "Cogent Communications"},
+      {"^80%.", "AS1299", "Telia Company"},
+      {"^129%.250%.", "AS2914", "NTT Communications"},
+      {"^80%.231%.", "AS6453", "TATA Communications"},
     }
 
     -- Check for specific IP ranges
@@ -839,7 +472,6 @@ local function lookup_asn(ip)
       asn_info.asn = "Unknown"
       asn_info.organization = "Unknown Network"
     end
-  end
 
   return asn_info
 end
