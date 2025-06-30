@@ -4,7 +4,7 @@
 
 MTR-Trace is an Nmap Scripting Engine (NSE) script that performs MTR-like (My Traceroute) traces to a target host. It provides comprehensive information about each hop in the path, including latency, jitter, packet loss, OS fingerprinting, and ASN information.
 
-Version: 1.0.2
+Version: 1.0.4
 
 ## Features
 
@@ -78,7 +78,7 @@ sudo nmap --script mtr-trace --script-args mtr-trace.packets=20,mtr-trace.timeou
 
 - OS fingerprinting is based on pattern matching and heuristics, not actual OS detection
 - ASN information is looked up in real-time using Team Cymru's whois service via DNS
-- The traceroute implementation is simplified and may not work in all network environments
+- The script requires root/sudo privileges to send raw packets for traceroute
 - For full OS detection capabilities, run Nmap with the `-O` flag against specific hops
 
 ## License

@@ -5,6 +5,34 @@ All notable changes to the MTR-Trace NSE script will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.4] - 2025-06-29
+
+### Added
+- Implemented real traceroute functionality using Nmap's native packet crafting capabilities
+- Added support for capturing and analyzing ICMP responses
+- Added proper packet capture and analysis for accurate hop detection
+
+### Changed
+- Replaced simulated traceroute with real packet-based traceroute
+- Updated README.md to reflect the real traceroute implementation
+- Added requirement for root/sudo privileges in documentation
+
+### Fixed
+- Fixed issues with ASN lookups for certain IP ranges
+- Improved error handling for packet capture and network operations
+
+## [1.0.3] - 2025-06-29
+
+### Changed
+- Reverted to an enhanced simulated traceroute implementation
+- Improved the simulated traceroute to provide more realistic results
+- Updated README.md to clarify that the script uses a simulated traceroute
+- Added more detailed debugging information for ASN lookups
+
+### Fixed
+- Fixed issues with the real traceroute implementation that was not working correctly
+- Improved error handling and fallback mechanisms
+
 ## [1.0.2] - 2025-06-29
 
 ### Fixed
